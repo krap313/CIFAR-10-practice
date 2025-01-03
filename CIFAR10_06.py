@@ -107,7 +107,6 @@ def train_cifar(batch_size, lr, epochs, data_dir=None):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(net.parameters(), lr=lr, weight_decay=5e-4)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=lr, epochs=epochs, steps_per_epoch=len(trainloader))
 
     trainset, testset = load_data(data_dir)
 
@@ -122,6 +121,8 @@ def train_cifar(batch_size, lr, epochs, data_dir=None):
     valloader = torch.utils.data.DataLoader(
         val_subset, batch_size=batch_size, shuffle=False, num_workers=4
     )
+
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=lr, epochs=epochs, steps_per_epoch=len(trainloader))
 
     epoch_losses = []
     val_accuracies = []
