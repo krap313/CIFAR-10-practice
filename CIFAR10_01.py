@@ -18,18 +18,23 @@ import matplotlib.pyplot as plt
 # Test loss: 0.0313
 # Test accuracy: 64.92%
 
+## Ray tune 최적화
+# Best trial config: {'l1': 16, 'l2': 256, 'lr': 0.001291802461956584, 'batch_size': 4}
+# Best trial final validation loss: 1.2639321207880974
+# Best trial final validation accuracy: 0.5702
+
 if __name__ == "__main__":
 
     # train dataset download
     train_dataset = datasets.CIFAR10(root="./data/", train=True, download=True, transform=transforms.ToTensor())
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=32, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=4, shuffle=True)
     print()
     print("---Train dataset---")
     print(train_loader.dataset)
 
     # test dataset download
     test_dataset = datasets.CIFAR10(root="./data/", train=False, download=True, transform=transforms.ToTensor())
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=32, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=4, shuffle=False)
     print()
     print("---Test dataset---")
     print(test_loader.dataset)
@@ -59,9 +64,9 @@ if __name__ == "__main__":
                 kernel_size=2,
                 stride=2
             )
-            self.fc1 = nn.Linear(8 * 8 * 16, 64)
-            self.fc2 = nn.Linear(64, 32)
-            self.fc3 = nn.Linear(32, 10)
+            self.fc1 = nn.Linear(8 * 8 * 16, 16)
+            self.fc2 = nn.Linear(16, 256)
+            self.fc3 = nn.Linear(256, 10)
 
         def forward(self, x):
             x = self.conv1(x)
@@ -85,7 +90,7 @@ if __name__ == "__main__":
     print(f"Using PyTorch version: {torch.__version__}  |  Device: {DEVICE}")
 
     model = CNN().to(DEVICE)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001291802461956584)
     criterion = nn.CrossEntropyLoss()
 
     train_losses = []

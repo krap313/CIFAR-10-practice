@@ -65,6 +65,7 @@ def train_cifar(config, data_dir=None):
     net = Net(config["l1"], config["l2"])
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    print(f"Using PyTorch version: {torch.__version__}  |  Device: {device}")
     if torch.cuda.device_count() > 1:
         net = nn.DataParallel(net)
     net.to(device)
