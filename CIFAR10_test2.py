@@ -7,31 +7,33 @@ from torch.utils.data import random_split
 import torchvision
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
+from tqdm import tqdm  # For progress bar
+import json  # For saving results
 
 # Data transforms (normalization & data augmentation)
 stats = ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 
-def get_transforms(normalization=True):
-    train_tfms = [
-        transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
-        transforms.RandomHorizontalFlip(),
-        transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
-        transforms.ToTensor()
-    ]
+def get_transforms(normalization=True, data_augmentation=True):
+    train_tfms = []
+    if data_augmentation:
+        train_tfms.extend([
+            transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
+            transforms.RandomHorizontalFlip(),
+            transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10)
+        ])
+    train_tfms.append(transforms.ToTensor())
     if normalization:
         train_tfms.append(transforms.Normalize(*stats))
 
-    valid_tfms = [
-        transforms.ToTensor()
-    ]
+    valid_tfms = [transforms.ToTensor()]
     if normalization:
         valid_tfms.append(transforms.Normalize(*stats))
 
     return transforms.Compose(train_tfms), transforms.Compose(valid_tfms)
 
 # Load CIFAR-10 data
-def load_data(data_dir="./data", normalization=True):
-    train_tfms, valid_tfms = get_transforms(normalization)
+def load_data(data_dir="./data", normalization=True, data_augmentation=True):
+    train_tfms, valid_tfms = get_transforms(normalization, data_augmentation)
 
     trainset = torchvision.datasets.CIFAR10(
         root=data_dir, train=True, download=True, transform=train_tfms
@@ -106,29 +108,35 @@ class ResNet(nn.Module):
         return x
 
 class SimpleCNN(nn.Module):
-    def __init__(self):
+    def __init__(self, batch_norm=False):
         super(SimpleCNN, self).__init__()
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(16) if batch_norm else nn.Identity()
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(32) if batch_norm else nn.Identity()
         self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.bn3 = nn.BatchNorm2d(64) if batch_norm else nn.Identity()
         self.fc = nn.Linear(64 * 32 * 32, 10)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.bn3(self.conv3(x)))
         x = x.view(x.size(0), -1)
         return self.fc(x)
 
 # Training function
-def train_cifar(model, batch_size, lr, epochs, data_dir, normalization, lr_scheduling):
+def train_cifar(model, batch_size, lr, epochs, data_dir, normalization, data_augmentation, lr_scheduling, optimizer_type, gradient_clipping):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=5e-4)
+    if optimizer_type == "Adam":
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
+    else:
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
 
-    trainset, testset = load_data(data_dir, normalization)
+    trainset, testset = load_data(data_dir, normalization, data_augmentation)
 
     train_size = int(len(trainset) * 0.8)
     train_subset, val_subset = random_split(
@@ -136,10 +144,10 @@ def train_cifar(model, batch_size, lr, epochs, data_dir, normalization, lr_sched
     )
 
     trainloader = torch.utils.data.DataLoader(
-        train_subset, batch_size=batch_size, shuffle=True, num_workers=4
+        train_subset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True
     )
     valloader = torch.utils.data.DataLoader(
-        val_subset, batch_size=batch_size, shuffle=False, num_workers=4
+        val_subset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True
     )
 
     scheduler = None
@@ -158,7 +166,8 @@ def train_cifar(model, batch_size, lr, epochs, data_dir, normalization, lr_sched
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            if gradient_clipping:
+                nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             if scheduler:
                 scheduler.step()
@@ -199,17 +208,17 @@ def plot_results(results):
 # Experiment Runner
 def run_experiments():
     experiments = [
-        {"normalization": False, "resnet": False, "lr_scheduling": False},
-        {"normalization": True, "resnet": False, "lr_scheduling": False},
-        {"normalization": True, "resnet": True, "lr_scheduling": False},
-        {"normalization": True, "resnet": True, "lr_scheduling": True},
+        {"normalization": False, "resnet": False, "lr_scheduling": False, "data_augmentation": False, "batch_norm": False, "optimizer": "SGD", "gradient_clipping": False},
+        {"normalization": True, "resnet": False, "lr_scheduling": False, "data_augmentation": False, "batch_norm": False, "optimizer": "SGD", "gradient_clipping": False},
+        {"normalization": True, "resnet": True, "lr_scheduling": False, "data_augmentation": False, "batch_norm": True, "optimizer": "SGD", "gradient_clipping": False},
+        {"normalization": True, "resnet": True, "lr_scheduling": True, "data_augmentation": True, "batch_norm": True, "optimizer": "Adam", "gradient_clipping": True},
     ]
 
     results = []
 
-    for i, exp in enumerate(experiments):
+    for i, exp in enumerate(tqdm(experiments, desc="Running Experiments")):
         print(f"Running experiment {i+1}/{len(experiments)}: {exp}")
-        model = ResNet() if exp["resnet"] else SimpleCNN()
+        model = ResNet() if exp["resnet"] else SimpleCNN(batch_norm=exp["batch_norm"])
         accuracy = train_cifar(
             model=model,
             batch_size=128,
@@ -217,10 +226,17 @@ def run_experiments():
             epochs=10,
             data_dir="./data",
             normalization=exp["normalization"],
-            lr_scheduling=exp["lr_scheduling"]
+            data_augmentation=exp["data_augmentation"],
+            lr_scheduling=exp["lr_scheduling"],
+            optimizer_type=exp["optimizer"],
+            gradient_clipping=exp["gradient_clipping"]
         )
         results.append({"experiment": exp, "accuracy": accuracy})
         print(f"Experiment {i+1}/{len(experiments)} completed. Accuracy: {accuracy:.4f}")
+
+    # Save results to a file
+    with open("experiment_results.json", "w") as f:
+        json.dump(results, f, indent=4)
 
     for res in results:
         print(f"Experiment: {res['experiment']}, Accuracy: {res['accuracy']:.4f}")
