@@ -7,8 +7,41 @@ from torch.utils.data import random_split
 import torchvision
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
+### 활용 개념
+## 1. Data normalization
+# input data를 normalize를 통해 정규화하여 [0,1] 범위로 변환한다.
+
+## 2. Data augmentation
+# 데이터를 증강하여 다양한 데이터 분포에 적응할 수 있도록 한다.
+# RandomCrop, RandomHorizontalFlip, AutoAugment
+
+## 3. Residual connections
+# 입력과 출력을 더하여 신호를 전달해서 깊은 네트워크를 활용할 수 있도록 한다.
+# 기울기 소실 문제 완화
+# ResidualBlock, ResNet
+
+## 4. Batch normalization
+# convolution layer뒤에 BatchNorm2d를 사용하여 각 batch의 출력값을 정규화.
 
 
+## 5. Learning rate scheduling
+# OneCycleLR 사용하여 초반 lr 크게, 후반 lr 작게(초반 학습속도 빠르게, 후반 디테일)
+
+## 6. Gradient clipping
+# nn.utils.clip_grad_norm_을 사용하여 기울기 값 제한(안정적 학습)
+
+## 7. Adam optimizer
+# Weight Decay(가중치 감쇠) 적용하여 과적합 방지
+
+## 8. Efficient data loading
+# DataLoader에서 num_workers와 pin_memory를 사용하여 데이터 로딩 속도 최적화(병렬 로딩)
+
+## 9. Adaptive average pooling
+# AdaptiveAvgPool2d를 사용하여 고정된 출력 크기 보장
+
+
+
+## Result
 # Epoch 1/30, Loss: 1.6639, Accuracy: 0.3961
 # Epoch 2/30, Loss: 1.8134, Accuracy: 0.3761
 # Epoch 3/30, Loss: 1.4617, Accuracy: 0.5009
