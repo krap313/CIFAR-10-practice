@@ -14,6 +14,7 @@ from ray import train
 from ray.train import Checkpoint, get_checkpoint
 from ray.tune.schedulers import ASHAScheduler
 import ray.cloudpickle as pickle
+import matplotlib.pyplot as plt
 
 # Configuration for hyperparameter tuning
 config = {
@@ -94,6 +95,9 @@ def train_cifar(config, data_dir=None):
         val_subset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=8
     )
 
+    epoch_losses = []
+    val_accuracies = []
+
     for epoch in range(10):
         net.train()
         running_loss = 0.0
@@ -105,6 +109,8 @@ def train_cifar(config, data_dir=None):
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+
+        epoch_losses.append(running_loss / len(trainloader))
 
         net.eval()
         val_loss = 0.0
@@ -121,7 +127,10 @@ def train_cifar(config, data_dir=None):
                 correct += (predicted == labels).sum().item()
 
         accuracy = correct / total
+        val_accuracies.append(accuracy)
         train.report({"loss": val_loss / len(valloader), "accuracy": accuracy})
+
+    return epoch_losses, val_accuracies
 
 # Test accuracy
 def test_accuracy(net, device="cpu"):
@@ -141,6 +150,31 @@ def test_accuracy(net, device="cpu"):
             correct += (predicted == labels).sum().item()
 
     return correct / total
+
+# Plotting results
+def plot_results(epochs, train_losses, val_accuracies):
+    plt.figure(figsize=(12, 6))
+
+    # Loss Plot
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, label="Train Loss")
+    plt.title("Loss per Epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend(loc="upper right")
+
+    # Accuracy Plot
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, val_accuracies, label="Validation Accuracy")
+    plt.title("Accuracy per Epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.legend(loc="lower right")
+
+    plt.tight_layout()
+    plt.savefig("training_results.png")
+    print("Plots saved as 'training_results.png'")
+    plt.show()
 
 # Main function
 def main(num_samples=10, max_num_epochs=10, gpus_per_trial=1):
@@ -170,7 +204,6 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=1):
 
     best_trained_model = Net(best_trial.config["l1"], best_trial.config["l2"])
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    print(f"Using PyTorch version: {torch.__version__}  |  Device: {device}")
     best_trained_model.to(device)
 
     best_checkpoint = result.get_best_checkpoint(best_trial)
@@ -182,6 +215,11 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=1):
 
     test_acc = test_accuracy(best_trained_model, device)
     print(f"Best trial test set accuracy: {test_acc}")
+
+    # Retrieve epoch losses and validation accuracies for plotting
+    epochs = list(range(1, max_num_epochs + 1))
+    train_losses, val_accuracies = train_cifar(best_trial.config, data_dir=data_dir)
+    plot_results(epochs, train_losses, val_accuracies)
 
 if __name__ == "__main__":
     main()
