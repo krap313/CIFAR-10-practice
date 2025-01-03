@@ -8,6 +8,43 @@ import torchvision
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 
+
+# Epoch 1/30, Loss: 1.6639, Accuracy: 0.3961
+# Epoch 2/30, Loss: 1.8134, Accuracy: 0.3761
+# Epoch 3/30, Loss: 1.4617, Accuracy: 0.5009
+# Epoch 4/30, Loss: 1.1461, Accuracy: 0.5928
+# Epoch 5/30, Loss: 1.1291, Accuracy: 0.6063
+# Epoch 6/30, Loss: 1.2254, Accuracy: 0.5961
+# Epoch 7/30, Loss: 1.0662, Accuracy: 0.6415
+# Epoch 8/30, Loss: 1.2910, Accuracy: 0.6028
+# Epoch 9/30, Loss: 0.8546, Accuracy: 0.7079
+# Epoch 10/30, Loss: 0.8122, Accuracy: 0.7263
+# Epoch 11/30, Loss: 1.0707, Accuracy: 0.6771
+# Epoch 12/30, Loss: 0.6609, Accuracy: 0.7704
+# Epoch 13/30, Loss: 0.6682, Accuracy: 0.7760
+# Epoch 14/30, Loss: 0.6382, Accuracy: 0.7850
+# Epoch 15/30, Loss: 0.5568, Accuracy: 0.8118
+# Epoch 16/30, Loss: 0.5291, Accuracy: 0.8174
+# Epoch 17/30, Loss: 0.4779, Accuracy: 0.8326
+# Epoch 18/30, Loss: 0.5008, Accuracy: 0.8274
+# Epoch 20/30, Loss: 0.4311, Accuracy: 0.8522
+# Epoch 21/30, Loss: 0.4373, Accuracy: 0.8532
+# Epoch 22/30, Loss: 0.4204, Accuracy: 0.8608
+# Epoch 23/30, Loss: 0.3744, Accuracy: 0.8716
+# Epoch 24/30, Loss: 0.3799, Accuracy: 0.8745
+# Epoch 25/30, Loss: 0.3778, Accuracy: 0.8729
+# Epoch 26/30, Loss: 0.3640, Accuracy: 0.8784
+# Epoch 27/30, Loss: 0.3603, Accuracy: 0.8804
+# Epoch 28/30, Loss: 0.3428, Accuracy: 0.8858
+# Epoch 29/30, Loss: 0.3538, Accuracy: 0.8769
+# Epoch 30/30, Loss: 0.3595, Accuracy: 0.8810
+
+
+
+
+
+
+
 # Data transforms (normalization & data augmentation)
 stats = ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 train_tfms = transforms.Compose([
