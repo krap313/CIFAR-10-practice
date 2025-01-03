@@ -4,21 +4,19 @@ import torch.nn as nn
 from torchvision import transforms, datasets
 import matplotlib.pyplot as plt
 
-# Test 01
+## Test 01
 # bash size: 32
 # learning rate(lr): 0.001
 # epoch: 10
-
 # Test loss: 0.0324
 # Test accuracy: 64.33%
 
-# Test 02
+## Test 02
 # bash size: 32
 # learning rate(lr): 0.0005
 # epoch: 20
-
-# Test loss: 0.0324
-# Test accuracy: 64.33%
+# Test loss: 0.0313
+# Test accuracy: 64.92%
 
 if __name__ == "__main__":
 

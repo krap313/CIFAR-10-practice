@@ -1,125 +1,186 @@
-import ssl
+from functools import partial
+import os
+import tempfile
+from pathlib import Path
 import torch
 import torch.nn as nn
-from torchvision import transforms, datasets
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.utils.data import random_split
+import torchvision
+import torchvision.transforms as transforms
+from ray import tune
+from ray import train
+from ray.train import Checkpoint, get_checkpoint
+from ray.tune.schedulers import ASHAScheduler
+import ray.cloudpickle as pickle
 
-## Version 01
-# bash size: 32
-# learning rate(lr): 0.001
-# epoch: 10
+# Configuration for hyperparameter tuning
+config = {
+    "l1": tune.choice([2 ** i for i in range(9)]),
+    "l2": tune.choice([2 ** i for i in range(9)]),
+    "lr": tune.loguniform(1e-4, 1e-1),
+    "batch_size": tune.choice([2, 4, 8, 16]),
+}
 
-## Result
-# Test loss: 0.0324
-# Test accuracy: 64.33%
-
-
-
-# train dataset download
-train_dataset = datasets.CIFAR10(root="./data/", train=True, download=True, transform=transforms.ToTensor())
-train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=32, shuffle=True)
-print()
-print("---Train dataset---")
-print(train_loader.dataset)
-
-
-
-# test dataset download
-test_dataset = datasets.CIFAR10(root="./data/", train=False, download=True, transform=transforms.ToTensor())
-test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=32, shuffle=False)
-print()
-print("---Test dataset---")
-print(test_loader.dataset)
-
-
-# 입력 data와 label 데이터 size 및 type 확인
-for (X_train, Y_train) in train_loader:
-  print(f"X_train: {X_train.size()}  |   type: {X_train.type()}")
-  print(f"Y_train: {Y_train.size()}  |   type: {Y_train.type()}")
-  break
-
-class CNN(nn.Module):
-  def __init__(self):
-    super(CNN, self).__init__()
-    self.conv1 = nn.Conv2d(
-        in_channels=3,
-        out_channels=8,
-        kernel_size=3,
-        padding=1
+# Load CIFAR-10 data
+def load_data(data_dir="./data"):
+    transform = transforms.Compose(
+        [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )
-    self.conv2 = nn.Conv2d(
-        in_channels=8,
-        out_channels=16,
-        kernel_size=3,
-        padding=1
+
+    trainset = torchvision.datasets.CIFAR10(
+        root=data_dir, train=True, download=True, transform=transform
     )
-    self.pool = nn.MaxPool2d(
-        kernel_size=2,
-        stride=2
+
+    testset = torchvision.datasets.CIFAR10(
+        root=data_dir, train=False, download=True, transform=transform
     )
-    self.fc1 = nn.Linear(8 * 8 * 16, 64)
-    self.fc2 = nn.Linear(64, 32)
-    self.fc3 = nn.Linear(32, 10)
 
-  def forward(self, x):
-    x = self.conv1(x)
-    x = torch.relu(x)
-    x = self.pool(x)
-    x = self.conv2(x)
-    x = torch.relu(x)
-    x = self.pool(x)
+    return trainset, testset
 
-    x = x.view(-1, 8 * 8 * 16)
-    x = self.fc1(x)
-    x = torch.relu(x)
-    x = self.fc2(x)
-    x = torch.relu(x)
-    x = self.fc3(x)
-    x = torch.log_softmax(x, dim=1)
-    return x
+# Define the neural network
+class Net(nn.Module):
+    def __init__(self, l1=120, l2=84):
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 5 * 5, l1)
+        self.fc2 = nn.Linear(l1, l2)
+        self.fc3 = nn.Linear(l2, 10)
 
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
-DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+# Training function
+def train_cifar(config, data_dir=None):
+    net = Net(config["l1"], config["l2"])
 
-print(f"Using PyTorch version: {torch.__version__}  |  Device: {DEVICE}")
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.device_count() > 1:
+        net = nn.DataParallel(net)
+    net.to(device)
 
-model = CNN().to(DEVICE)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(net.parameters(), lr=config["lr"], momentum=0.9)
 
+    checkpoint = get_checkpoint()
+    if checkpoint:
+        with checkpoint.as_directory() as checkpoint_dir:
+            data_path = Path(checkpoint_dir) / "data.pkl"
+            with open(data_path, "rb") as fp:
+                checkpoint_state = pickle.load(fp)
+            net.load_state_dict(checkpoint_state["net_state_dict"])
+            optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
+    
+    trainset, testset = load_data(data_dir)
 
-def train(model, train_loader, optimizer, log_interval):
-  model.train()
-  for batch_idx, (image, label) in enumerate(train_loader):
-    image = image.to(DEVICE)
-    label = label.to(DEVICE)
-    optimizer.zero_grad()
-    output = model(image)
-    loss = criterion(output, label)
-    loss.backward()
-    optimizer.step()
+    train_size = int(len(trainset) * 0.8)
+    train_subset, val_subset = random_split(
+        trainset, [train_size, len(trainset) - train_size]
+    )
 
-    if batch_idx % log_interval == 0:
-      print(f"train Epoch: {Epoch} [{batch_idx * len(image)}/{len(train_loader.dataset)}({100. * batch_idx / len(train_loader):.0f}%)]\tTrain Loss: {loss.item()}")
-      
-def evaluate(model, test_loader):
-  model.eval()
-  test_loss = 0
-  correct = 0
-  with torch.no_grad():
-    for image, label in test_loader:
-      image = image.to(DEVICE)
-      label = label.to(DEVICE)
-      output = model(image)
-      test_loss += criterion(output, label).item()
-      prediction = output.max(1, keepdim=True)[1]
-      correct += prediction.eq(label.view_as(prediction)).sum().item()
+    trainloader = torch.utils.data.DataLoader(
+        train_subset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=8
+    )
+    valloader = torch.utils.data.DataLoader(
+        val_subset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=8
+    )
 
-  test_loss /= len(test_loader.dataset)
-  test_accuracy = 100. * correct / len(test_loader.dataset)
-  return test_loss, test_accuracy
+    for epoch in range(10):
+        net.train()
+        running_loss = 0.0
+        for inputs, labels in trainloader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            optimizer.zero_grad()
+            outputs = net(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
 
-EPOCHS = 10
-for Epoch in range(1, EPOCHS + 1):
-  train(model, train_loader, optimizer, log_interval=200)
-  test_loss, test_accuracy = evaluate(model, test_loader)
-  print(f"\n[EPOCH: {Epoch}]\tTest Loss: {test_loss:.4f}\tTest Accuracy: {test_accuracy} % \n")
+        net.eval()
+        val_loss = 0.0
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for inputs, labels in valloader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = net(inputs)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item()
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+
+        accuracy = correct / total
+        train.report({"loss": val_loss / len(valloader), "accuracy": accuracy})
+
+# Test accuracy
+def test_accuracy(net, device="cpu"):
+    _, testset = load_data()
+    testloader = torch.utils.data.DataLoader(
+        testset, batch_size=4, shuffle=False, num_workers=2
+    )
+
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for inputs, labels in testloader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = net(inputs)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    return correct / total
+
+# Main function
+def main(num_samples=10, max_num_epochs=10, gpus_per_trial=1):
+    data_dir = os.path.abspath("./data")
+    load_data(data_dir)
+
+    scheduler = ASHAScheduler(
+        metric="loss",
+        mode="min",
+        max_t=max_num_epochs,
+        grace_period=1,
+        reduction_factor=2,
+    )
+
+    result = tune.run(
+        partial(train_cifar, data_dir=data_dir),
+        resources_per_trial={"cpu": 2, "gpu": gpus_per_trial},
+        config=config,
+        num_samples=num_samples,
+        scheduler=scheduler,
+    )
+
+    best_trial = result.get_best_trial("loss", "min", "last")
+    print(f"Best trial config: {best_trial.config}")
+    print(f"Best trial final validation loss: {best_trial.last_result['loss']}")
+    print(f"Best trial final validation accuracy: {best_trial.last_result['accuracy']}")
+
+    best_trained_model = Net(best_trial.config["l1"], best_trial.config["l2"])
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    best_trained_model.to(device)
+
+    best_checkpoint = result.get_best_checkpoint(best_trial)
+    with best_checkpoint.as_directory() as checkpoint_dir:
+        data_path = Path(checkpoint_dir) / "data.pkl"
+        with open(data_path, "rb") as fp:
+            checkpoint_state = pickle.load(fp)
+        best_trained_model.load_state_dict(checkpoint_state["net_state_dict"])
+
+    test_acc = test_accuracy(best_trained_model, device)
+    print(f"Best trial test set accuracy: {test_acc}")
+
+if __name__ == "__main__":
+    main()
