@@ -9,6 +9,39 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 
+# 추가된 증강 방식에 맞게 증강 강도 및 lr, optimizer 조정
+
+## Result
+# Epoch 1/30, Loss: 1.6248, Val Accuracy: 0.4379
+# Epoch 2/30, Loss: 1.2524, Val Accuracy: 0.5709
+# Epoch 3/30, Loss: 1.0655, Val Accuracy: 0.5787
+# Epoch 4/30, Loss: 0.9205, Val Accuracy: 0.5489
+# Epoch 5/30, Loss: 0.8275, Val Accuracy: 0.6168
+# Epoch 6/30, Loss: 0.7477, Val Accuracy: 0.6724
+# Epoch 7/30, Loss: 0.6877, Val Accuracy: 0.7300
+# Epoch 8/30, Loss: 0.6453, Val Accuracy: 0.7556
+# Epoch 9/30, Loss: 0.6051, Val Accuracy: 0.7361
+# Epoch 10/30, Loss: 0.5708, Val Accuracy: 0.7682
+# Epoch 11/30, Loss: 0.5524, Val Accuracy: 0.7719
+# Epoch 12/30, Loss: 0.5244, Val Accuracy: 0.7542
+# Epoch 13/30, Loss: 0.5027, Val Accuracy: 0.7842
+# Epoch 14/30, Loss: 0.4907, Val Accuracy: 0.7902
+# Epoch 15/30, Loss: 0.4764, Val Accuracy: 0.7925
+# Epoch 16/30, Loss: 0.4578, Val Accuracy: 0.8022
+# Epoch 17/30, Loss: 0.4496, Val Accuracy: 0.7693
+# Epoch 18/30, Loss: 0.4326, Val Accuracy: 0.7807
+# Epoch 19/30, Loss: 0.4178, Val Accuracy: 0.8108
+# Epoch 20/30, Loss: 0.3975, Val Accuracy: 0.8410
+# Epoch 21/30, Loss: 0.3697, Val Accuracy: 0.8385
+# Epoch 22/30, Loss: 0.3559, Val Accuracy: 0.8490
+# Epoch 23/30, Loss: 0.3321, Val Accuracy: 0.8550
+# Epoch 24/30, Loss: 0.2983, Val Accuracy: 0.8640
+# Epoch 25/30, Loss: 0.2663, Val Accuracy: 0.8779
+# Epoch 26/30, Loss: 0.2342, Val Accuracy: 0.8850
+# Epoch 27/30, Loss: 0.1835, Val Accuracy: 0.8935
+# Epoch 28/30, Loss: 0.1582, Val Accuracy: 0.9021
+# Epoch 29/30, Loss: 0.1289, Val Accuracy: 0.9068
+# Epoch 30/30, Loss: 0.1223, Val Accuracy: 0.9093
 
 # Cutout 클래스 정의
 class Cutout:
