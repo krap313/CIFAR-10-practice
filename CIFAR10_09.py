@@ -6,10 +6,12 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import random_split, DataLoader
 import numpy as np
-from torchvision.models import resnet50
+from torchvision.models import resnet50, ResNet50_Weights
 import matplotlib.pyplot as plt
 from PIL import Image
 
+net = resnet50(weights=ResNet50_Weights.DEFAULT)
+net.fc = nn.Linear(net.fc.in_features, 10)
 
 ## 개선점
 # 데이터 증강 방식 추가 : mixup
@@ -76,12 +78,18 @@ class LabelSmoothingLoss(nn.Module):
         self.smooth = smoothing / classes
 
     def forward(self, pred, target):
-        target = target.to(dtype=torch.int64)  # 레이블을 int64로 변환
-        one_hot = torch.zeros_like(pred).scatter(1, target.unsqueeze(1), 1).to(pred.device)  # 같은 디바이스로 이동
+        # target을 int64로 변환
+        target = target.to(dtype=torch.int64)
+
+        # scatter 호출 시 차원을 맞추기 위해 target을 unsqueeze
+        one_hot = torch.zeros_like(pred).scatter(1, target.view(-1, 1), 1).to(pred.device)
+
+        # 라벨 스무딩 적용
         smoothed_labels = one_hot * self.confidence + self.smooth
         log_probs = nn.LogSoftmax(dim=1)(pred)
         loss = -(smoothed_labels * log_probs).sum(dim=1).mean()
         return loss
+
 
 
 
