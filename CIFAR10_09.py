@@ -72,10 +72,15 @@ class LabelSmoothingLoss(nn.Module):
     def forward(self, pred, target):
         target = target.to(dtype=torch.int64)
 
-        assert target.dim() == 1, f"Expected target to have 1 dimension, got {target.dim()}"
+        if target.dim() > 1:
+            target = target.argmax(dim=1)  # 다차원 타겟을 1차원으로 변환
+
         assert torch.max(target) < pred.size(1), f"Target indices are out of range. Max target value: {torch.max(target)}, pred.size(1): {pred.size(1)}"
 
-        one_hot = torch.zeros_like(pred).scatter(1, target.view(-1, 1), 1).to(pred.device)
+        if target.dim() == 1:
+            target = target.view(-1, 1)  # 1차원 타겟을 2차원으로 변환
+
+        one_hot = torch.zeros_like(pred).scatter(1, target, 1).to(pred.device)
 
         smoothed_labels = one_hot * self.confidence + self.smooth
         log_probs = nn.LogSoftmax(dim=1)(pred)
