@@ -72,7 +72,8 @@ class LabelSmoothingLoss(nn.Module):
     def forward(self, pred, target):
         target = target.to(dtype=torch.int64)
 
-        assert torch.max(target) < pred.size(1), "Target indices are out of range for the given prediction tensor"
+        assert target.dim() == 1, f"Expected target to have 1 dimension, got {target.dim()}"
+        assert torch.max(target) < pred.size(1), f"Target indices are out of range. Max target value: {torch.max(target)}, pred.size(1): {pred.size(1)}"
 
         one_hot = torch.zeros_like(pred).scatter(1, target.view(-1, 1), 1).to(pred.device)
 
@@ -154,6 +155,8 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
             loss = criterion(outputs, mix_labels)
             loss.backward()
             optimizer.step()
+
+            running_loss += loss.item()  # 각 배치 손실 합산
 
         train_losses.append(running_loss / len(trainloader))
         scheduler.step()
