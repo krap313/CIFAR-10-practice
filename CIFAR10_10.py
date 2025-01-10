@@ -1,81 +1,103 @@
 import os
+import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import random_split, DataLoader
 import torchvision
 import torchvision.transforms as transforms
-from torch.utils.data import random_split, DataLoader
-import numpy as np
-from torchvision.models import resnet101, ResNet101_Weights
 import matplotlib.pyplot as plt
 from PIL import Image
+import numpy as np
+from torch.optim.lr_scheduler import _LRScheduler
+from torchvision.models import resnet101, ResNet101_Weights
 
 ## 개선점
-# 이미 학습된 ResNet-101 가져옴
-# 데이터 증강 방식 추가(mixup)
-# label smoothing -> 일반화 분포 학습, 과적합 방지
-# Cosine Annealing Warm Restarts
-# epoch 30 -> 50
+# scheduler 매개변수 조정
+# validation 크기 증가
+# warmup 단계 추가
+# 증강 강도 조정정
+# pytorch에서 지원하는 cosine annealing warm restart 대신 github의 코드를 사용.
+# 주기마다 학습률의 최댓값을 낮춰 학습 진행
+# epoch값 증가 50 -> 100
 
 
-# cosine annealing warmup때문에 문제 발생(학습률 최댓값, 주기 너무 짧을수도)
+## epoch 100까지는 cosine annealing warm restart 사용하고 그 이후 epoch 130 까지는 사용하지 않고 돌려볼까?
 
 
-## Result
-# Epoch 1/50, Loss: 1.6252, Val Accuracy: 0.1416
-# Epoch 2/50, Loss: 1.3841, Val Accuracy: 0.3002
-# Epoch 3/50, Loss: 1.3250, Val Accuracy: 0.6694
-# Epoch 4/50, Loss: 1.2845, Val Accuracy: 0.4807
-# Epoch 5/50, Loss: 1.2638, Val Accuracy: 0.6669
-# Epoch 6/50, Loss: 1.2368, Val Accuracy: 0.5067
-# Epoch 7/50, Loss: 1.1879, Val Accuracy: 0.3696
-# Epoch 8/50, Loss: 1.1784, Val Accuracy: 0.5675
-# Epoch 9/50, Loss: 1.1689, Val Accuracy: 0.6960
-# Epoch 10/50, Loss: 1.1424, Val Accuracy: 0.6647
-# Epoch 11/50, Loss: 1.3085, Val Accuracy: 0.1408
-# Epoch 12/50, Loss: 1.2716, Val Accuracy: 0.1045
-# Epoch 13/50, Loss: 1.2687, Val Accuracy: 0.5891
-# Epoch 14/50, Loss: 1.2566, Val Accuracy: 0.6989
-# Epoch 15/50, Loss: 1.2421, Val Accuracy: 0.6491
-# Epoch 16/50, Loss: 1.2940, Val Accuracy: 0.1059
-# Epoch 17/50, Loss: 1.3043, Val Accuracy: 0.4413
-# Epoch 18/50, Loss: 1.2657, Val Accuracy: 0.6032
-# Epoch 19/50, Loss: 1.2362, Val Accuracy: 0.5604
-# Epoch 20/50, Loss: 1.2085, Val Accuracy: 0.6321
-# Epoch 21/50, Loss: 1.2001, Val Accuracy: 0.6269
-# Epoch 22/50, Loss: 1.1887, Val Accuracy: 0.2259
-# Epoch 23/50, Loss: 1.1610, Val Accuracy: 0.7468
-# Epoch 24/50, Loss: 1.1637, Val Accuracy: 0.6876
-# Epoch 25/50, Loss: 1.1524, Val Accuracy: 0.7137
-# Epoch 26/50, Loss: 1.1247, Val Accuracy: 0.7526
-# Epoch 27/50, Loss: 1.1128, Val Accuracy: 0.7536
-# Epoch 28/50, Loss: 1.0839, Val Accuracy: 0.7283
-# Epoch 29/50, Loss: 1.0930, Val Accuracy: 0.7189
-# Epoch 30/50, Loss: 1.0826, Val Accuracy: 0.7480
-# Epoch 31/50, Loss: 1.1834, Val Accuracy: 0.1131
-# Epoch 32/50, Loss: 1.2171, Val Accuracy: 0.5149
-# Epoch 33/50, Loss: 1.2148, Val Accuracy: 0.4792
-# Epoch 34/50, Loss: 1.2420, Val Accuracy: 0.6843
-# Epoch 35/50, Loss: 1.2015, Val Accuracy: 0.4813
-# Epoch 36/50, Loss: 1.2075, Val Accuracy: 0.1621
-# Epoch 37/50, Loss: 1.2115, Val Accuracy: 0.6150
-# Epoch 38/50, Loss: 1.1751, Val Accuracy: 0.7035
-# Epoch 39/50, Loss: 1.1109, Val Accuracy: 0.1379
-# Epoch 40/50, Loss: 1.1611, Val Accuracy: 0.3659
-# Epoch 41/50, Loss: 1.1806, Val Accuracy: 0.6793
-# Epoch 42/50, Loss: 1.1675, Val Accuracy: 0.5780
-# Epoch 43/50, Loss: 1.1225, Val Accuracy: 0.6776
-# Epoch 44/50, Loss: 1.1225, Val Accuracy: 0.7208
-# Epoch 45/50, Loss: 1.1186, Val Accuracy: 0.2068
-# Epoch 46/50, Loss: 1.0694, Val Accuracy: 0.3731
-# Epoch 47/50, Loss: 1.1083, Val Accuracy: 0.4530
-# Epoch 48/50, Loss: 1.1036, Val Accuracy: 0.6581
-# Epoch 49/50, Loss: 1.0069, Val Accuracy: 0.1257
-# Epoch 50/50, Loss: 1.0648, Val Accuracy: 0.6792
+# Custom CosineAnnealingWarmupRestarts Scheduler
+class CosineAnnealingWarmupRestarts(_LRScheduler):
+    def __init__(self,
+                 optimizer: torch.optim.Optimizer,
+                 first_cycle_steps: int,
+                 cycle_mult: float = 1.,
+                 max_lr: float = 0.1,
+                 min_lr: float = 0.001,
+                 warmup_steps: int = 0,
+                 gamma: float = 1.,
+                 last_epoch: int = -1):
+        assert warmup_steps < first_cycle_steps
 
+        self.first_cycle_steps = first_cycle_steps
+        self.cycle_mult = cycle_mult
+        self.base_max_lr = max_lr
+        self.max_lr = max_lr
+        self.min_lr = min_lr
+        self.warmup_steps = warmup_steps
+        self.gamma = gamma
 
+        self.cur_cycle_steps = first_cycle_steps
+        self.cycle = 0
+        self.step_in_cycle = last_epoch
 
-## ResNet-101 모델 초기화
+        super(CosineAnnealingWarmupRestarts, self).__init__(optimizer, last_epoch)
+        self.init_lr()
+
+    def init_lr(self):
+        self.base_lrs = []
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = self.min_lr
+            self.base_lrs.append(self.min_lr)
+
+    def get_lr(self):
+        if self.step_in_cycle == -1:
+            return self.base_lrs
+        elif self.step_in_cycle < self.warmup_steps:
+            return [(self.max_lr - base_lr) * self.step_in_cycle / self.warmup_steps + base_lr for base_lr in self.base_lrs]
+        else:
+            return [base_lr + (self.max_lr - base_lr) * \
+                    (1 + math.cos(math.pi * (self.step_in_cycle - self.warmup_steps) / \
+                                    (self.cur_cycle_steps - self.warmup_steps))) / 2
+                    for base_lr in self.base_lrs]
+
+    def step(self, epoch=None):
+        if epoch is None:
+            epoch = self.last_epoch + 1
+            self.step_in_cycle = self.step_in_cycle + 1
+            if self.step_in_cycle >= self.cur_cycle_steps:
+                self.cycle += 1
+                self.step_in_cycle = self.step_in_cycle - self.cur_cycle_steps
+                self.cur_cycle_steps = int((self.cur_cycle_steps - self.warmup_steps) * self.cycle_mult) + self.warmup_steps
+        else:
+            if epoch >= self.first_cycle_steps:
+                if self.cycle_mult == 1.:
+                    self.step_in_cycle = epoch % self.first_cycle_steps
+                    self.cycle = epoch // self.first_cycle_steps
+                else:
+                    n = int(math.log((epoch / self.first_cycle_steps * (self.cycle_mult - 1) + 1), self.cycle_mult))
+                    self.cycle = n
+                    self.step_in_cycle = epoch - int(self.first_cycle_steps * (self.cycle_mult ** n - 1) / (self.cycle_mult - 1))
+                    self.cur_cycle_steps = self.first_cycle_steps * self.cycle_mult ** n
+            else:
+                self.cur_cycle_steps = self.first_cycle_steps
+                self.step_in_cycle = epoch
+
+        self.max_lr = self.base_max_lr * (self.gamma ** self.cycle)
+        self.last_epoch = math.floor(epoch)
+        for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
+            param_group['lr'] = lr
+
+# ResNet-101 모델 초기화
 net = resnet101(weights=ResNet101_Weights.DEFAULT)
 net.fc = nn.Linear(net.fc.in_features, 10)
 
@@ -138,12 +160,12 @@ class LabelSmoothingLoss(nn.Module):
         target = target.to(dtype=torch.int64)
 
         if target.dim() > 1:
-            target = target.argmax(dim=1)  # 다차원 타겟을 1차원으로 변환
+            target = target.argmax(dim=1)
 
         assert torch.max(target) < pred.size(1), f"Target indices are out of range. Max target value: {torch.max(target)}, pred.size(1): {pred.size(1)}"
 
         if target.dim() == 1:
-            target = target.view(-1, 1)  # 1차원 타겟을 2차원으로 변환
+            target = target.view(-1, 1)
 
         one_hot = torch.zeros_like(pred).scatter(1, target, 1).to(pred.device)
 
@@ -183,14 +205,14 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
     trainset, testset = load_data(data_dir)
 
     # 데이터 분할
-    train_size = int(len(trainset) * 0.8)
+    train_size = int(len(trainset) * 0.9)
     train_subset, val_subset = random_split(
         trainset, [train_size, len(trainset) - train_size]
     )
 
     # DataLoader
-    trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=2)
-    valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=2)
+    trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=4)
+    valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     # 사전 학습된 ResNet-101 불러오기
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -200,7 +222,7 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
 
     # Optimizer, Scheduler, Loss
     optimizer = optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+    scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=10, cycle_mult=2, max_lr=lr, min_lr=1e-5, warmup_steps=5, gamma=0.5)
     criterion = LabelSmoothingLoss(classes=10, smoothing=0.1)
 
     mixup = Mixup(alpha)
@@ -231,6 +253,10 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
         train_losses.append(running_loss / len(trainloader))
         scheduler.step(epoch + 1)
 
+        # 학습률 재시작 알림
+        if (epoch + 1) % scheduler.cur_cycle_steps == 0:
+            print(f"[INFO] Learning rate restarted at epoch {epoch+1}: {scheduler.get_lr()}")
+
         # 검증
         net.eval()
         correct, total = 0, 0
@@ -254,7 +280,7 @@ def plot_results(epochs, train_losses, val_accuracies):
 
     # 손실 그래프
     plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, label="Train Loss")
+    plt.plot(range(1, epochs + 1), train_losses, label="Train Loss")
     plt.title("Loss per Epoch")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
@@ -262,7 +288,7 @@ def plot_results(epochs, train_losses, val_accuracies):
 
     # 정확도 그래프
     plt.subplot(1, 2, 2)
-    plt.plot(epochs, val_accuracies, label="Validation Accuracy")
+    plt.plot(range(1, epochs + 1), val_accuracies, label="Validation Accuracy")
     plt.title("Accuracy per Epoch")
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy")
@@ -275,18 +301,16 @@ def plot_results(epochs, train_losses, val_accuracies):
 # Main 함수
 def main():
     data_dir = os.path.abspath("./data")
-    batch_size = 256
-    lr = 0.001
-    epochs = 50
+    batch_size = 128
+    lr = 0.01
+    epochs = 100
     alpha = 0.4  # Mixup의 알파 값
 
     # 학습 실행
     train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, alpha, data_dir=data_dir)
 
     # 결과 시각화
-    plot_results(range(1, epochs + 1), train_losses, val_accuracies)
+    plot_results(epochs, train_losses, val_accuracies)
 
 if __name__ == "__main__":
     main()
-
-
