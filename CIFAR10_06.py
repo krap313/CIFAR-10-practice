@@ -17,13 +17,16 @@ import matplotlib.pyplot as plt
 ## 2. Data augmentation
 # 데이터를 증강하여 다양한 데이터 분포에 적응할 수 있도록 한다.
 # 개별 원본 이미지를 변형하여 학습 이미지 데이터의 양을 늘리는 방식.
-# 
-# RandomCrop, RandomHorizontalFlip, AutoAugment
+# 회전(rotation), 좌우 반전(horizontal flip), 크기 조정 및 자르기(resize, random crop), 밝기, 대비 조정(color fitter), 노이즈 추가(adding noise), 잘라내기(cutout) 등
+# 이 코드에서 사용된 방식 : RandomCrop, RandomHorizontalFlip, AutoAugment
 
 ## 3. Residual connections
 # 입력과 출력을 더하여 신호를 전달해서 깊은 네트워크를 활용할 수 있도록 한다.
 # 기울기 소실 문제 완화
+# layer를 추가하여 일정 깊이에 도달한 모델을 정확도가 오히려 감소하는 현상(dagradaion)을 보인다.
+# 출력을 직접 학습하는 대신, residual(output - input)을 학습하여 입력 데이터를 보존할 수 있고 학습 난이도를 낮춘다.
 # ResidualBlock, ResNet
+
 
 ## 4. Batch normalization
 # convolution layer뒤에 BatchNorm2d를 사용하여 각 batch의 출력값을 정규화.
