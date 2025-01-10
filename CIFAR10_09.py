@@ -58,13 +58,13 @@ class Mixup:
 
     def __call__(self, x1, y1, x2, y2):
         lam = np.random.beta(self.alpha, self.alpha)
-        # labels를 int64로 변환
-        y1 = y1.to(dtype=torch.int64)
-        y2 = y2.to(dtype=torch.int64)
+        y1 = y1.to(dtype=torch.int64)  # 레이블을 int64로 변환
+        y2 = y2.to(dtype=torch.int64)  # 레이블을 int64로 변환
         x = lam * x1 + (1 - lam) * x2
-        y = lam * torch.nn.functional.one_hot(y1, num_classes=10).float() + \
-            (1 - lam) * torch.nn.functional.one_hot(y2, num_classes=10).float()
+        y = lam * torch.nn.functional.one_hot(y1, num_classes=10).to(x1.device).float() + \
+            (1 - lam) * torch.nn.functional.one_hot(y2, num_classes=10).to(x1.device).float()
         return x, y
+
 
 
 # Label Smoothing Loss
@@ -76,13 +76,13 @@ class LabelSmoothingLoss(nn.Module):
         self.smooth = smoothing / classes
 
     def forward(self, pred, target):
-        # target을 int64로 변환
-        target = target.to(dtype=torch.int64)
-        one_hot = torch.zeros_like(pred).scatter(1, target.unsqueeze(1), 1)
+        target = target.to(dtype=torch.int64)  # 레이블을 int64로 변환
+        one_hot = torch.zeros_like(pred).scatter(1, target.unsqueeze(1), 1).to(pred.device)  # 같은 디바이스로 이동
         smoothed_labels = one_hot * self.confidence + self.smooth
         log_probs = nn.LogSoftmax(dim=1)(pred)
         loss = -(smoothed_labels * log_probs).sum(dim=1).mean()
         return loss
+
 
 
 
@@ -147,20 +147,21 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
         net.train()
         running_loss = 0.0
         for inputs, labels in trainloader:
-            inputs, labels = inputs.to(device), labels.to(dtype=torch.int64)
+            inputs, labels = inputs.to(device), labels.to(device)
 
             # Mixup 데이터 증강
             if np.random.rand() > 0.5:
-                indices = torch.randperm(inputs.size(0)).to(device)
+                indices = torch.randperm(inputs.size(0)).to(device)  # 인덱스도 동일한 디바이스로 이동
                 mix_inputs, mix_labels = mixup(inputs, labels, inputs[indices], labels[indices])
             else:
-                mix_inputs, mix_labels = inputs, torch.nn.functional.one_hot(labels, num_classes=10).float()
+                mix_inputs, mix_labels = inputs, torch.nn.functional.one_hot(labels.to(dtype=torch.int64), num_classes=10).to(device).float()
 
             optimizer.zero_grad()
             outputs = net(mix_inputs)
             loss = criterion(outputs, mix_labels)
             loss.backward()
             optimizer.step()
+
 
 
         train_losses.append(running_loss / len(trainloader))
