@@ -7,84 +7,42 @@ from torch.utils.data import random_split
 import torchvision
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
-### 활용 개념
-## 1. Data normalization
-# input data를 normalize를 통해 정규화하여 [0,1] 범위로 변환한다.
-# 값의 크기가 작은 데이터보다 값의 크기가 큰 데이터에 가중치가 편향되는 문제를 방지하기 위해 모든 데이터 값을 normalization하여 0~1 사이의 값으로 축소시킨다.
-# x = (x - x_min) / (x_max - x_min)
-# 다른 개념으로는 data standardization이 있다.
-
-## 2. Data augmentation
-# 데이터를 증강하여 다양한 데이터 분포에 적응할 수 있도록 한다.
-# 개별 원본 이미지를 변형하여 학습 이미지 데이터의 양을 늘리는 방식.
-# 
-# RandomCrop, RandomHorizontalFlip, AutoAugment
-
-## 3. Residual connections
-# 입력과 출력을 더하여 신호를 전달해서 깊은 네트워크를 활용할 수 있도록 한다.
-# 기울기 소실 문제 완화
-# ResidualBlock, ResNet
-
-## 4. Batch normalization
-# convolution layer뒤에 BatchNorm2d를 사용하여 각 batch의 출력값을 정규화.
+from PIL import Image
+import numpy as np
 
 
-## 5. Learning rate scheduling
-# OneCycleLR 사용하여 초반 lr 크게, 후반 lr 작게(초반 학습속도 빠르게, 후반 디테일)
-
-## 6. Gradient clipping
-# nn.utils.clip_grad_norm_을 사용하여 기울기 값 제한(안정적 학습)
-
-## 7. Adam optimizer
-# Weight Decay(가중치 감쇠) 적용하여 과적합 방지
-
-## 8. Efficient data loading
-# DataLoader에서 num_workers와 pin_memory를 사용하여 데이터 로딩 속도 최적화(병렬 로딩)
-
-## 9. Adaptive average pooling
-# AdaptiveAvgPool2d를 사용하여 고정된 출력 크기 보장
-
-
-### 번외
-## 1. Data standardization
-# 튀는 데이터(outlier)를 제거하여 학습을 정상적으로 진행하도록 한다.
-# z-score를 계산하여 score가 -2 ~ 2를 벗어난 값들을 모두 지워준다.
-# z(x) = (x - 평균) / 표준편차
+#추가한 부분 augmentation 방식을 추가하여 데이터 증강
 
 
 
-## Result
-# Epoch 1/30, Loss: 1.6639, Accuracy: 0.3961
-# Epoch 2/30, Loss: 1.8134, Accuracy: 0.3761
-# Epoch 3/30, Loss: 1.4617, Accuracy: 0.5009
-# Epoch 4/30, Loss: 1.1461, Accuracy: 0.5928
-# Epoch 5/30, Loss: 1.1291, Accuracy: 0.6063
-# Epoch 6/30, Loss: 1.2254, Accuracy: 0.5961
-# Epoch 7/30, Loss: 1.0662, Accuracy: 0.6415
-# Epoch 8/30, Loss: 1.2910, Accuracy: 0.6028
-# Epoch 9/30, Loss: 0.8546, Accuracy: 0.7079
-# Epoch 10/30, Loss: 0.8122, Accuracy: 0.7263
-# Epoch 11/30, Loss: 1.0707, Accuracy: 0.6771
-# Epoch 12/30, Loss: 0.6609, Accuracy: 0.7704
-# Epoch 13/30, Loss: 0.6682, Accuracy: 0.7760
-# Epoch 14/30, Loss: 0.6382, Accuracy: 0.7850
-# Epoch 15/30, Loss: 0.5568, Accuracy: 0.8118
-# Epoch 16/30, Loss: 0.5291, Accuracy: 0.8174
-# Epoch 17/30, Loss: 0.4779, Accuracy: 0.8326
-# Epoch 18/30, Loss: 0.5008, Accuracy: 0.8274
-# Epoch 20/30, Loss: 0.4311, Accuracy: 0.8522
-# Epoch 21/30, Loss: 0.4373, Accuracy: 0.8532
-# Epoch 22/30, Loss: 0.4204, Accuracy: 0.8608
-# Epoch 23/30, Loss: 0.3744, Accuracy: 0.8716
-# Epoch 24/30, Loss: 0.3799, Accuracy: 0.8745
-# Epoch 25/30, Loss: 0.3778, Accuracy: 0.8729
-# Epoch 26/30, Loss: 0.3640, Accuracy: 0.8784
-# Epoch 27/30, Loss: 0.3603, Accuracy: 0.8804
-# Epoch 28/30, Loss: 0.3428, Accuracy: 0.8858
-# Epoch 29/30, Loss: 0.3538, Accuracy: 0.8769
-# Epoch 30/30, Loss: 0.3595, Accuracy: 0.8810
+# Cutout 클래스 정의
+class Cutout:
+    def __init__(self, size):
+        self.size = size  # 잘라낼 사각형의 크기
 
+    def __call__(self, img):
+        h, w = img.size
+        x = np.random.randint(0, w)
+        y = np.random.randint(0, h)
+        x1 = np.clip(x - self.size // 2, 0, w)
+        y1 = np.clip(y - self.size // 2, 0, h)
+        x2 = np.clip(x + self.size // 2, 0, w)
+        y2 = np.clip(y + self.size // 2, 0, h)
+        img = np.array(img)
+        img[y1:y2, x1:x2] = 0  # 해당 영역을 검은색으로 만듦
+        return Image.fromarray(img)
+    
+class AddNoise:
+    def __init__(self, std=0.1):
+        self.std = std
 
+    def __call__(self, img):
+        if not isinstance(img, torch.Tensor):
+            img = transforms.ToTensor()(img)
+        noise = torch.randn_like(img) * self.std
+        img = img + noise
+        img = torch.clamp(img, 0.0, 1.0)  # 값 범위 유지
+        return transforms.ToPILImage()(img)
 
 
 
@@ -94,11 +52,15 @@ import matplotlib.pyplot as plt
 # random crop(크기 조정 및 자르기), random horizontal flip(좌우 반전전), auto augment()
 stats = ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 train_tfms = transforms.Compose([
-    transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
-    transforms.RandomHorizontalFlip(),
-    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
-    transforms.ToTensor(),
-    transforms.Normalize(*stats)
+    transforms.RandomCrop(32, padding=4, padding_mode='reflect'),  # 랜덤 크롭
+    transforms.RandomHorizontalFlip(),  # 좌우 반전
+    transforms.RandomRotation(degrees=15),  # 회전
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),  # 색상 변화
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),  # AutoAugment 적용
+    Cutout(size=8),  # Cutout 적용
+    AddNoise(std=0.05),  # 노이즈 추가
+    transforms.ToTensor(),  # 텐서로 변환
+    transforms.Normalize(*stats)  # 정규화
 ])
 valid_tfms = transforms.Compose([
     transforms.ToTensor(),
