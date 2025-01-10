@@ -6,12 +6,12 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import random_split, DataLoader
 import numpy as np
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet101, ResNet101_Weights
 import matplotlib.pyplot as plt
 from PIL import Image
 
-## ResNet-50 모델 초기화
-net = resnet50(weights=ResNet50_Weights.DEFAULT)
+## ResNet-101 모델 초기화
+net = resnet101(weights=ResNet101_Weights.DEFAULT)
 net.fc = nn.Linear(net.fc.in_features, 10)
 
 # Cutout 클래스 정의
@@ -127,15 +127,15 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
     trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=2)
     valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=2)
 
-    # 사전 학습된 ResNet-50 불러오기
+    # 사전 학습된 ResNet-101 불러오기
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    net = resnet50(weights=ResNet50_Weights.DEFAULT)
+    net = resnet101(weights=ResNet101_Weights.DEFAULT)
     net.fc = nn.Linear(net.fc.in_features, 10)
     net.to(device)
 
     # Optimizer, Scheduler, Loss
-    optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    optimizer = optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
     criterion = LabelSmoothingLoss(classes=10, smoothing=0.1)
 
     mixup = Mixup(alpha)
@@ -164,7 +164,7 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
             running_loss += loss.item()  # 각 배치 손실 합산
 
         train_losses.append(running_loss / len(trainloader))
-        scheduler.step()
+        scheduler.step(epoch + 1)
 
         # 검증
         net.eval()
@@ -211,8 +211,8 @@ def plot_results(epochs, train_losses, val_accuracies):
 def main():
     data_dir = os.path.abspath("./data")
     batch_size = 256
-    lr = 0.01
-    epochs = 30
+    lr = 0.001
+    epochs = 50
     alpha = 0.4  # Mixup의 알파 값
 
     # 학습 실행
