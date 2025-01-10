@@ -9,8 +9,6 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 
-# 추가한 데이터 증강 방식에 맞게 증강 강도 및 순서를 조정하고 lr 및 optimizer 조정.
-
 
 # Cutout 클래스 정의
 class Cutout:
@@ -135,7 +133,92 @@ class ResNet(nn.Module):
         return x
 
 
-# 학습 함수 및 테스트 정확도 함수는 기존 코드 재활용
+# 학습 함수 정의
+def train_cifar(batch_size, lr, epochs, data_dir=None):
+    trainset, testset = load_data(data_dir)
+
+    # 데이터 분할
+    train_size = int(len(trainset) * 0.8)
+    train_subset, val_subset = random_split(
+        trainset, [train_size, len(trainset) - train_size]
+    )
+
+    # DataLoader
+    trainloader = torch.utils.data.DataLoader(
+        train_subset, batch_size=batch_size, shuffle=True, num_workers=4
+    )
+    valloader = torch.utils.data.DataLoader(
+        val_subset, batch_size=batch_size, shuffle=False, num_workers=4
+    )
+
+    # 모델 및 학습 설정
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    net = ResNet(num_classes=10).to(device)
+    optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=lr, epochs=epochs, steps_per_epoch=len(trainloader))
+    criterion = nn.CrossEntropyLoss()
+
+    # 학습 루프
+    train_losses, val_accuracies = [], []
+    for epoch in range(epochs):
+        net.train()
+        running_loss = 0.0
+        for inputs, labels in trainloader:
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = net(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+
+            running_loss += loss.item()
+
+        # 학습 손실 저장
+        train_losses.append(running_loss / len(trainloader))
+
+        # 검증 정확도
+        net.eval()
+        correct, total = 0, 0
+        with torch.no_grad():
+            for inputs, labels in valloader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = net(inputs)
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+        val_accuracy = correct / total
+        val_accuracies.append(val_accuracy)
+
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss / len(trainloader):.4f}, Val Accuracy: {val_accuracy:.4f}")
+
+    return train_losses, val_accuracies
+
+
+# 학습 결과 시각화
+def plot_results(epochs, train_losses, val_accuracies):
+    plt.figure(figsize=(12, 6))
+
+    # 손실 그래프
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, label="Train Loss")
+    plt.title("Loss per Epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend(loc="upper right")
+
+    # 정확도 그래프
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, val_accuracies, label="Validation Accuracy")
+    plt.title("Accuracy per Epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.legend(loc="lower right")
+
+    plt.tight_layout()
+    plt.savefig("training_results.png")
+    plt.show()
 
 
 # 증강된 이미지 시각화 함수
@@ -151,18 +234,20 @@ def visualize_augmented_images(dataset, n=6):
     plt.show()
 
 
-# Main 함수 실행 시 데이터 증강을 검증 및 모델 학습
+# Main 함수 실행
 def main():
     data_dir = os.path.abspath("./data")
     trainset, _ = load_data(data_dir)
     visualize_augmented_images(trainset)  # 증강된 이미지 확인
+
     batch_size = 128
     lr = 0.1
     epochs = 30
 
+    # 학습 실행
     train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, data_dir=data_dir)
 
-    # Plot results
+    # 결과 시각화
     plot_results(range(1, epochs + 1), train_losses, val_accuracies)
 
 
