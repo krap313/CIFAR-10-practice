@@ -16,13 +16,13 @@ from torchvision.models import resnet101, ResNet101_Weights
 # scheduler 매개변수 조정
 # validation 크기 증가
 # warmup 단계 추가
-# 증강 강도 조정정
+# 증강 강도 조정
 # pytorch에서 지원하는 cosine annealing warm restart 대신 github의 코드를 사용.
 # 주기마다 학습률의 최댓값을 낮춰 학습 진행
 # epoch값 증가 50 -> 100
 
 
-## epoch 100까지는 cosine annealing warm restart 사용하고 그 이후 epoch 130 까지는 사용하지 않고 돌려볼까?
+
 
 
 # Custom CosineAnnealingWarmupRestarts Scheduler
