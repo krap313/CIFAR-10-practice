@@ -241,6 +241,9 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
 
     train_losses, val_accuracies = [], []
 
+    # Create plot
+    plt.figure(figsize=(12, 6))
+
     for epoch in range(epochs):
         model.train()
         running_loss = 0
@@ -276,6 +279,25 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
         val_accuracies.append(accuracy)
 
         print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss / len(trainloader):.4f}, Accuracy: {accuracy:.4f}")
+
+        # Update plot
+        plt.clf()
+        plt.subplot(1, 2, 1)
+        plt.plot(range(1, len(train_losses) + 1), train_losses, label="Train Loss")
+        plt.title("Loss per Epoch")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend(loc="upper right")
+
+        plt.subplot(1, 2, 2)
+        plt.plot(range(1, len(val_accuracies) + 1), val_accuracies, label="Validation Accuracy")
+        plt.title("Accuracy per Epoch")
+        plt.xlabel("Epoch")
+        plt.ylabel("Accuracy")
+        plt.legend(loc="lower right")
+
+        plt.tight_layout()
+        plt.savefig(f"training_progress_epoch_{epoch+1}.png")
 
     return train_losses, val_accuracies
 
