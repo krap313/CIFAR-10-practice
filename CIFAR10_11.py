@@ -238,7 +238,7 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
 
     # DataLoader
     trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
-    valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=4)
+    valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=8)
 
     # ResNet6 모델 불러오기
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -326,7 +326,7 @@ def plot_results(epochs, train_losses, val_accuracies):
 # Main 함수
 def main():
     data_dir = os.path.abspath("./data")
-    batch_size = 4096
+    batch_size = 2048
     lr = 0.01
     epochs = 100
     alpha = 0.4  # Mixup의 알파 값
