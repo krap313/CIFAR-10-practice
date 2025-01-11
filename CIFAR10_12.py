@@ -91,8 +91,8 @@ train_tfms = transforms.Compose([
     transforms.RandomHorizontalFlip(),
     transforms.RandomRotation(degrees=10),
     transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1),
-    Cutout(size=4),
-    AddNoise(std=0.02),
+    Cutout(size=8),  # Increased size for better effect
+    AddNoise(std=0.01),  # Reduced noise for cleaner augmentation
     transforms.ToTensor(),
     transforms.Normalize(*stats)
 ])
@@ -144,8 +144,22 @@ class ResNet(nn.Module):
         x = self.fc(x)
         return x
 
+# Linear Warmup Scheduler
+class LinearWarmupScheduler:
+    def __init__(self, optimizer, warmup_steps, total_steps):
+        self.optimizer = optimizer
+        self.warmup_steps = warmup_steps
+        self.total_steps = total_steps
+        self.current_step = 0
+
+    def step(self):
+        self.current_step += 1
+        lr_scale = min(self.current_step / self.warmup_steps, 1.0)
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = lr_scale * param_group['initial_lr']
+
 # 학습 함수 정의
-def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=1.0):
+def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=0.2):  # Adjusted alpha for better mixup effect
     trainset, testset = load_data(data_dir)
 
     train_size = int(len(trainset) * 0.8)
@@ -154,16 +168,21 @@ def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=1.0):
     )
 
     trainloader = torch.utils.data.DataLoader(
-        train_subset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True
+        train_subset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True
     )
     valloader = torch.utils.data.DataLoader(
-        val_subset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True
+        val_subset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True
     )
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     net = ResNet(num_classes=10).to(device)
     optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=lr, epochs=epochs, steps_per_epoch=len(trainloader))
+    for param_group in optimizer.param_groups:
+        param_group['initial_lr'] = lr
+
+    warmup_steps = int(len(trainloader) * 3)  # Reduced warmup steps for faster convergence
+    total_steps = len(trainloader) * epochs
+    scheduler = LinearWarmupScheduler(optimizer, warmup_steps, total_steps)
     criterion = nn.CrossEntropyLoss()
 
     train_losses, val_accuracies = [], []
@@ -201,28 +220,7 @@ def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=1.0):
 
         print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss / len(trainloader):.4f}, Val Accuracy: {val_accuracy:.4f}")
 
-        # mixup된 데이터 시각화
-        visualize_mixup_images(inputs, mixed_inputs, lam, epoch)
-
     return train_losses, val_accuracies
-
-# mixup 데이터 시각화
-def visualize_mixup_images(original, mixed, lam, epoch):
-    plt.figure(figsize=(12, 6))
-    for i in range(6):
-        plt.subplot(2, 6, i + 1)
-        plt.imshow(original[i].cpu().permute(1, 2, 0).numpy())
-        plt.axis('off')
-        plt.title("Original")
-
-        plt.subplot(2, 6, i + 7)
-        plt.imshow(mixed[i].cpu().permute(1, 2, 0).numpy())
-        plt.axis('off')
-        plt.title(f"Mixup (lam={lam:.2f})")
-
-    plt.tight_layout()
-    plt.savefig(f"mixup_epoch_{epoch+1}.png")
-    plt.show()
 
 # 학습 결과 시각화
 def plot_results(epochs, train_losses, val_accuracies):
@@ -252,9 +250,9 @@ def plot_results(epochs, train_losses, val_accuracies):
 def main():
     data_dir = os.path.abspath("./data")
     batch_size = 1024
-    lr = 0.1
+    lr = 0.05  # Reduced learning rate for smoother training
     epochs = 30
-    alpha = 1.0
+    alpha = 0.2
 
     train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, data_dir=data_dir, alpha=alpha)
     plot_results(range(1, epochs + 1), train_losses, val_accuracies)
