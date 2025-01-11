@@ -326,7 +326,7 @@ def plot_results(epochs, train_losses, val_accuracies):
 # Main 함수
 def main():
     data_dir = os.path.abspath("./data")
-    batch_size = 128
+    batch_size = 4096
     lr = 0.01
     epochs = 100
     alpha = 0.4  # Mixup의 알파 값
