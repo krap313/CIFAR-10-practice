@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 from torch.optim.lr_scheduler import _LRScheduler
+from tqdm import tqdm
 
 # Custom CosineAnnealingWarmupRestarts Scheduler
 class CosineAnnealingWarmupRestarts(_LRScheduler):
@@ -236,7 +237,7 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
     )
 
     # DataLoader
-    trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=4)
+    trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=16)
     valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     # ResNet6 모델 불러오기
@@ -255,37 +256,42 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
     for epoch in range(epochs):
         net.train()
         running_loss = 0.0
-        for inputs, labels in trainloader:
-            inputs, labels = inputs.to(device), labels.to(device)
 
-            # Mixup 데이터 증강
-            if np.random.rand() > 0.5:
-                indices = torch.randperm(inputs.size(0)).to(device)
-                mix_inputs, mix_labels = mixup(inputs, labels, inputs[indices], labels[indices])
-            else:
-                mix_inputs, mix_labels = inputs, torch.nn.functional.one_hot(labels, num_classes=10).to(device).float()
+        with tqdm(trainloader, desc=f"Epoch {epoch+1}/{epochs}") as t:
+            for inputs, labels in t:
+                inputs, labels = inputs.to(device), labels.to(device)
 
-            optimizer.zero_grad()
-            outputs = net(mix_inputs)
-            loss = criterion(outputs, mix_labels)
-            loss.backward()
-            optimizer.step()
+                # Mixup 데이터 증강
+                if np.random.rand() > 0.5:
+                    indices = torch.randperm(inputs.size(0)).to(device)
+                    mix_inputs, mix_labels = mixup(inputs, labels, inputs[indices], labels[indices])
+                else:
+                    mix_inputs, mix_labels = inputs, torch.nn.functional.one_hot(labels, num_classes=10).to(device).float()
 
-            running_loss += loss.item()  # 각 배치 손실 합산
+                optimizer.zero_grad()
+                outputs = net(mix_inputs)
+                loss = criterion(outputs, mix_labels)
+                loss.backward()
+                optimizer.step()
+
+                running_loss += loss.item()  # 각 배치 손실 합산
+                t.set_postfix(loss=running_loss / len(t))
 
         train_losses.append(running_loss / len(trainloader))
-        scheduler.step()
+        scheduler.step(epoch + 1)
 
         # 검증
         net.eval()
         correct, total = 0, 0
         with torch.no_grad():
-            for inputs, labels in valloader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = net(inputs)
-                _, predicted = torch.max(outputs, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+            with tqdm(valloader, desc="Validation") as t:
+                for inputs, labels in t:
+                    inputs, labels = inputs.to(device), labels.to(device)
+                    outputs = net(inputs)
+                    _, predicted = torch.max(outputs, 1)
+                    total += labels.size(0)
+                    correct += (predicted == labels).sum().item()
+                    t.set_postfix(accuracy=correct / total)
         val_accuracy = correct / total
         val_accuracies.append(val_accuracy)
 
@@ -317,20 +323,20 @@ def plot_results(epochs, train_losses, val_accuracies):
     plt.savefig("training_results.png")
     plt.show()
 
+# Main 함수
 def main():
     data_dir = os.path.abspath("./data")
-    batch_size = 4096  # Increased batch size for more stable gradients
-    lr = 0.005  # Lower learning rate for more gradual learning
-    epochs = 150  # Increased number of epochs for better convergence
-    alpha = 0.2  # Reduced Mixup alpha for less aggressive data mixing
+    batch_size = 128
+    lr = 0.01
+    epochs = 100
+    alpha = 0.4  # Mixup의 알파 값
 
-    # Adjust the weight decay to prevent overfitting
-    train_losses, val_accuracies = train_cifar(
-        batch_size, lr, epochs, alpha, data_dir=data_dir
-    )
+    # 학습 실행
+    train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, alpha, data_dir=data_dir)
 
-    # Plot results
-    plot_results(range(1, epochs + 1), train_losses, val_accuracies)
+    # 결과 시각화
+    plot_results(epochs, train_losses, val_accuracies)
 
 if __name__ == "__main__":
     main()
+
