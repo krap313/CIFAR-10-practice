@@ -251,19 +251,21 @@ def plot_results(epochs, train_losses, val_accuracies):
     plt.savefig("training_results.png")
     plt.show()
 
-# Main 함수
 def main():
     data_dir = os.path.abspath("./data")
     batch_size = 128
     lr = 0.001
+    max_lr = 0.01  # Maximum learning rate for linear warmup
+    warmup_epochs = 5
     epochs = 50
-    alpha = 0.4  # Mixup의 알파 값
+    alpha = 0.4  # Mixup alpha value
 
-    # 학습 실행
-    train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, alpha, data_dir=data_dir)
+    # Call the training function with all arguments
+    train_losses, val_accuracies = train_cifar(batch_size, lr, max_lr, warmup_epochs, epochs, alpha, data_dir=data_dir)
 
-    # 결과 시각화
-    plot_results(epochs, train_losses, val_accuracies)
+    # Plot results
+    plot_results(range(1, epochs + 1), train_losses, val_accuracies)
+
 
 if __name__ == "__main__":
     main()
