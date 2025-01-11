@@ -84,7 +84,7 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
 
-# ResNet6 모델 정의
+# Residual Block
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super(ResidualBlock, self).__init__()
@@ -108,6 +108,7 @@ class ResidualBlock(nn.Module):
         out = self.relu(out)
         return out
 
+# ResNet6 Model
 class ResNet6(nn.Module):
     def __init__(self, num_classes=10):
         super(ResNet6, self).__init__()
@@ -136,7 +137,7 @@ class ResNet6(nn.Module):
         x = self.fc(x)
         return x
 
-# Cutout 클래스 정의
+# Data Augmentation: Including Cutout, AddNoise, and Mixup
 class Cutout:
     def __init__(self, size):
         self.size = size
@@ -153,7 +154,6 @@ class Cutout:
         img[y1:y2, x1:x2] = 0
         return Image.fromarray(img)
 
-# AddNoise 클래스 정의
 class AddNoise:
     def __init__(self, std=0.01):
         self.std = std
@@ -166,7 +166,6 @@ class AddNoise:
         img = torch.clamp(img, 0.0, 1.0)
         return transforms.ToPILImage()(img)
 
-# Mixup 데이터 증강
 class Mixup:
     def __init__(self, alpha=0.4):
         self.alpha = alpha
@@ -201,7 +200,7 @@ class LabelSmoothingLoss(nn.Module):
         loss = -(smoothed_labels * log_probs).sum(dim=1).mean()
         return loss
 
-# 데이터 증강
+# Data Augmentation
 stats = ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 train_tfms = transforms.Compose([
     transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
@@ -216,185 +215,74 @@ valid_tfms = transforms.Compose([
     transforms.Normalize(*stats)
 ])
 
-# 데이터 로드 함수
+# Load Data
+
 def load_data(data_dir="./data"):
-    trainset = torchvision.datasets.CIFAR10(
-        root=data_dir, train=True, download=True, transform=train_tfms
-    )
-    testset = torchvision.datasets.CIFAR10(
-        root=data_dir, train=False, download=True, transform=valid_tfms
-    )
+    trainset = torchvision.datasets.CIFAR10(root=data_dir, train=True, download=True, transform=train_tfms)
+    testset = torchvision.datasets.CIFAR10(root=data_dir, train=False, download=True, transform=valid_tfms)
     return trainset, testset
 
-# 학습 함수
+# Training Loop
+
 def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
     trainset, testset = load_data(data_dir)
-
-    # 데이터 분할
     train_size = int(len(trainset) * 0.9)
-    train_subset, val_subset = random_split(
-        trainset, [train_size, len(trainset) - train_size]
-    )
+    train_subset, val_subset = random_split(trainset, [train_size, len(trainset) - train_size])
 
-    # DataLoader
     trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
-    valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=8)
+    valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True)
 
-    # ResNet6 모델 불러오기
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    net = ResNet6(num_classes=10).to(device)
-
-    # Optimizer, Scheduler, Loss
-    optimizer = optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = ResNet6(num_classes=10).to(device)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=10, cycle_mult=2, max_lr=lr, min_lr=1e-5, warmup_steps=5, gamma=0.5)
     criterion = LabelSmoothingLoss(classes=10, smoothing=0.1)
-
     mixup = Mixup(alpha)
-
-    # 결과 실시간 업데이트를 위한 그래프 설정
-def plot_live(epochs, train_losses, val_accuracies):
-    plt.ion()  # Interactive mode on
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-
-    ax1.set_title("Loss per Epoch")
-    ax1.set_xlabel("Epoch")
-    ax1.set_ylabel("Loss")
-    train_loss_line, = ax1.plot([], [], label="Train Loss", color="blue")
-    ax1.legend()
-
-    ax2.set_title("Accuracy per Epoch")
-    ax2.set_xlabel("Epoch")
-    ax2.set_ylabel("Accuracy")
-    val_acc_line, = ax2.plot([], [], label="Validation Accuracy", color="orange")
-    ax2.legend()
-
-    return fig, ax1, ax2, train_loss_line, val_acc_line
-
-# 학습 함수에서 실시간 업데이트
-def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
-    trainset, testset = load_data(data_dir)
-
-    # 데이터 분할
-    train_size = int(len(trainset) * 0.9)
-    train_subset, val_subset = random_split(
-        trainset, [train_size, len(trainset) - train_size]
-    )
-
-    # DataLoader
-    trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
-    valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=4)
-
-    # ResNet6 모델 불러오기
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    net = ResNet6(num_classes=10).to(device)
-
-    # Optimizer, Scheduler, Loss
-    optimizer = optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=10, cycle_mult=2, max_lr=lr, min_lr=1e-5, warmup_steps=5, gamma=0.5)
-    criterion = LabelSmoothingLoss(classes=10, smoothing=0.1)
-
-    mixup = Mixup(alpha)
-
-    # 실시간 그래프 설정
-    fig, ax1, ax2, train_loss_line, val_acc_line = plot_live(epochs, [], [])
 
     train_losses, val_accuracies = [], []
+
     for epoch in range(epochs):
-        net.train()
-        running_loss = 0.0
+        model.train()
+        running_loss = 0
 
-        with tqdm(trainloader, desc=f"Epoch {epoch+1}/{epochs}") as t:
-            for inputs, labels in t:
-                inputs, labels = inputs.to(device), labels.to(device)
+        for images, labels in tqdm(trainloader, desc=f"Epoch {epoch+1}/{epochs}"):
+            images, labels = images.to(device), labels.to(device)
 
-                # Mixup 데이터 증강
-                if np.random.rand() > 0.5:
-                    indices = torch.randperm(inputs.size(0)).to(device)
-                    mix_inputs, mix_labels = mixup(inputs, labels, inputs[indices], labels[indices])
-                else:
-                    mix_inputs, mix_labels = inputs, torch.nn.functional.one_hot(labels, num_classes=10).to(device).float()
+            # Apply Mixup
+            if np.random.rand() > 0.5:
+                indices = torch.randperm(images.size(0)).to(device)
+                mix_inputs, mix_labels = mixup(images, labels, images[indices], labels[indices])
+            else:
+                mix_inputs, mix_labels = images, torch.nn.functional.one_hot(labels, num_classes=10).float()
 
-                optimizer.zero_grad()
-                outputs = net(mix_inputs)
-                loss = criterion(outputs, mix_labels)
-                loss.backward()
-                optimizer.step()
-
-                running_loss += loss.item()
-                t.set_postfix(loss=running_loss / len(t))
-
+            optimizer.zero_grad()
+            outputs = model(mix_inputs)
+            loss = criterion(outputs, mix_labels)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
         train_losses.append(running_loss / len(trainloader))
-        scheduler.step(epoch + 1)
 
-        # 검증
-        net.eval()
+        model.eval()
         correct, total = 0, 0
         with torch.no_grad():
-            with tqdm(valloader, desc="Validation") as t:
-                for inputs, labels in t:
-                    inputs, labels = inputs.to(device), labels.to(device)
-                    outputs = net(inputs)
-                    _, predicted = torch.max(outputs, 1)
-                    total += labels.size(0)
-                    correct += (predicted == labels).sum().item()
-                    t.set_postfix(accuracy=correct / total)
-        val_accuracy = correct / total
-        val_accuracies.append(val_accuracy)
+            for images, labels in valloader:
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+        accuracy = correct / total
+        val_accuracies.append(accuracy)
 
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {train_losses[-1]:.4f}, Val Accuracy: {val_accuracy:.4f}")
-
-        # 실시간 그래프 업데이트
-        train_loss_line.set_data(range(1, len(train_losses) + 1), train_losses)
-        val_acc_line.set_data(range(1, len(val_accuracies) + 1), val_accuracies)
-        ax1.relim()
-        ax1.autoscale_view()
-        ax2.relim()
-        ax2.autoscale_view()
-        plt.pause(0.1)  # 그래프 업데이트
-
-    plt.ioff()  # Interactive mode off
-    plt.show()
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss / len(trainloader):.4f}, Accuracy: {accuracy:.4f}")
 
     return train_losses, val_accuracies
 
+# Main
 
-# 실시간 그래프 업데이트 (계속 이어짐)
-def plot_results(epochs, train_losses, val_accuracies):
-    plt.figure(figsize=(12, 6))
-
-    # 손실 그래프
-    plt.subplot(1, 2, 1)
-    plt.plot(range(1, epochs + 1), train_losses, label="Train Loss")
-    plt.title("Loss per Epoch")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.legend(loc="upper right")
-
-    # 정확도 그래프
-    plt.subplot(1, 2, 2)
-    plt.plot(range(1, epochs + 1), val_accuracies, label="Validation Accuracy")
-    plt.title("Accuracy per Epoch")
-    plt.xlabel("Epoch")
-    plt.ylabel("Accuracy")
-    plt.legend(loc="lower right")
-
-    plt.tight_layout()
-    plt.savefig("training_results.png")
-    plt.show()
-
-# Main 함수
 def main():
-    data_dir = os.path.abspath("./data")
-    batch_size = 128
-    lr = 0.01
-    epochs = 100
-    alpha = 0.4  # Mixup의 알파 값
+    train_cifar(batch_size=2048, lr=0.001, epochs=100, alpha=0.4, data_dir="./data")
 
-    # 학습 실행
-    train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, alpha, data_dir=data_dir)
-
-    # 결과 시각화
-    plot_results(epochs, train_losses, val_accuracies)
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
