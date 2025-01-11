@@ -358,7 +358,7 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
     return train_losses, val_accuracies
 
 
-# 결과 시각화
+# 실시간 그래프 업데이트 (계속 이어짐)
 def plot_results(epochs, train_losses, val_accuracies):
     plt.figure(figsize=(12, 6))
 
@@ -385,7 +385,7 @@ def plot_results(epochs, train_losses, val_accuracies):
 # Main 함수
 def main():
     data_dir = os.path.abspath("./data")
-    batch_size = 2048
+    batch_size = 128
     lr = 0.01
     epochs = 100
     alpha = 0.4  # Mixup의 알파 값
