@@ -243,12 +243,13 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
 
     # Create plot
     plt.figure(figsize=(12, 6))
+    plot_file = "training_progress.png"
 
     for epoch in range(epochs):
         model.train()
         running_loss = 0
 
-        for images, labels in tqdm(trainloader, desc=f"Epoch {epoch+1}/{epochs}"):
+        for images, labels in tqdm(trainloader, desc=f"Epoch {epoch+1}/{epochs}", leave=False):
             images, labels = images.to(device), labels.to(device)
 
             # Apply Mixup
@@ -264,6 +265,7 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+
         train_losses.append(running_loss / len(trainloader))
 
         model.eval()
@@ -277,8 +279,6 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
                 correct += (predicted == labels).sum().item()
         accuracy = correct / total
         val_accuracies.append(accuracy)
-
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss / len(trainloader):.4f}, Accuracy: {accuracy:.4f}")
 
         # Update plot
         plt.clf()
@@ -297,7 +297,9 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
         plt.legend(loc="lower right")
 
         plt.tight_layout()
-        plt.savefig(f"training_progress_epoch_{epoch+1}.png")
+        plt.savefig(plot_file)
+
+        print(f"Epoch {epoch+1}/{epochs} | Loss: {train_losses[-1]:.4f} | Accuracy: {accuracy:.4f}")
 
     return train_losses, val_accuracies
 
