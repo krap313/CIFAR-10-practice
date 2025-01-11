@@ -54,6 +54,7 @@ class Mixup:
             (1 - lam) * torch.nn.functional.one_hot(y2, num_classes=10).float()
         return x, y
 
+
 # Label Smoothing Loss
 class LabelSmoothingLoss(nn.Module):
     def __init__(self, classes, smoothing=0.1):
@@ -63,12 +64,20 @@ class LabelSmoothingLoss(nn.Module):
         self.smooth = smoothing / classes
 
     def forward(self, pred, target):
-        target = target.to(dtype=torch.int64)
-        one_hot = torch.zeros_like(pred).scatter(1, target.view(-1, 1), 1)
-        smoothed_labels = one_hot * self.confidence + self.smooth
+        # Check if target is already one-hot encoded
+        if target.dim() > 1:
+            # Use the target directly if one-hot encoded
+            smoothed_labels = target * self.confidence + self.smooth
+        else:
+            # Convert to one-hot encoding
+            target = target.to(dtype=torch.int64)
+            one_hot = torch.zeros_like(pred).scatter(1, target.view(-1, 1), 1)
+            smoothed_labels = one_hot * self.confidence + self.smooth
+
         log_probs = nn.LogSoftmax(dim=1)(pred)
         loss = -(smoothed_labels * log_probs).sum(dim=1).mean()
         return loss
+
 
 # ResNet8 모델 정의
 class ResidualBlock(nn.Module):
@@ -197,6 +206,7 @@ def train_cifar(batch_size, lr, max_lr, warmup_epochs, epochs, alpha, data_dir=N
                 indices = torch.randperm(inputs.size(0)).to(device)
                 mix_inputs, mix_labels = mixup(inputs, labels, inputs[indices], labels[indices])
             else:
+                # Ensure labels are one-hot encoded
                 mix_inputs, mix_labels = inputs, torch.nn.functional.one_hot(labels, num_classes=10).to(device).float()
 
             optimizer.zero_grad()
@@ -204,6 +214,7 @@ def train_cifar(batch_size, lr, max_lr, warmup_epochs, epochs, alpha, data_dir=N
             loss = criterion(outputs, mix_labels)
             loss.backward()
             optimizer.step()
+
 
             running_loss += loss.item()
 
