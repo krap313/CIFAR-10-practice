@@ -221,12 +221,13 @@ def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=0.2):  # Adjusted a
         print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss / len(trainloader):.4f}, Val Accuracy: {val_accuracy:.4f}")
 
         # 실시간 그래프 업데이트
-        plot_results(range(1, epochs + 1), train_losses, val_accuracies, "training_results.png")
+        plot_results(range(1, epoch + 2), train_losses, val_accuracies, "training_results.png")
 
     return train_losses, val_accuracies
 
 # 학습 결과 시각화
 def plot_results(epochs, train_losses, val_accuracies, filename):
+    epochs = range(1, len(train_losses) + 1)  # Adjust epochs to match train_losses and val_accuracies
     plt.figure(figsize=(12, 6))
 
     # 손실 그래프
@@ -254,7 +255,7 @@ def main():
     data_dir = os.path.abspath("./data")
     batch_size = 1024
     lr = 0.05  # Reduced learning rate for smoother training
-    epochs = 60
+    epochs = 50
     alpha = 0.2
 
     train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, data_dir=data_dir, alpha=alpha)
