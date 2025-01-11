@@ -62,7 +62,7 @@ class ResidualBlock(nn.Module):
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-        out = self.conv2(x)
+        out = self.conv2(out)  # Corrected here
         out = self.bn2(out)
         out += identity
         return self.relu(out)
@@ -235,7 +235,7 @@ def plot_results(epochs, train_losses, val_accuracies, filename):
 # Main 함수 실행
 def main():
     data_dir = os.path.abspath("./data")
-    batch_size = 256
+    batch_size = 128
     lr = 0.05  # Reduced learning rate for smoother training
     epochs = 30
 
