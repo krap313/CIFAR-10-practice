@@ -74,7 +74,7 @@ import matplotlib.pyplot as plt
 # Epoch 15/30, Loss: 0.5568, Accuracy: 0.8118
 # Epoch 16/30, Loss: 0.5291, Accuracy: 0.8174
 # Epoch 17/30, Loss: 0.4779, Accuracy: 0.8326
-# Epoch 18/30, Loss: 0.5008, Accuracy: 0.8274
+# Epoch 18/30, Loss: 0.5008, Accuracy: 0.8274 
 # Epoch 20/30, Loss: 0.4311, Accuracy: 0.8522
 # Epoch 21/30, Loss: 0.4373, Accuracy: 0.8532
 # Epoch 22/30, Loss: 0.4204, Accuracy: 0.8608

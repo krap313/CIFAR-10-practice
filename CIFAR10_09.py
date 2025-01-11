@@ -10,14 +10,15 @@ from torchvision.models import resnet101, ResNet101_Weights
 import matplotlib.pyplot as plt
 from PIL import Image
 
+
 ## 개선점
-# 이미 학습된 ResNet-101 가져옴
+# 이미 학습된 ResNet-101 가져옴 - 이놈이 문제(너무 복잡한 함수, layer를 낮추자)
 # 데이터 증강 방식 추가(mixup)
 # label smoothing -> 일반화 분포 학습, 과적합 방지
 # Cosine Annealing Warm Restarts
 # epoch 30 -> 50
 
-
+# linear warm up 적용(초반 학습률)
 # cosine annealing warmup때문에 문제 발생(학습률 최댓값, 주기 너무 짧을수도)
 
 
