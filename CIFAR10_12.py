@@ -62,27 +62,10 @@ class ResidualBlock(nn.Module):
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-        out = self.conv2(out)
+        out = self.conv2(x)
         out = self.bn2(out)
         out += identity
         return self.relu(out)
-
-# Mixup 함수 정의
-def mixup_data(x, y, alpha=1.0):
-    if alpha > 0.0:
-        lam = np.random.beta(alpha, alpha)
-    else:
-        lam = 1.0
-
-    batch_size = x.size(0)
-    index = torch.randperm(batch_size).to(x.device)
-
-    mixed_x = lam * x + (1 - lam) * x[index, :]
-    y_a, y_b = y, y[index]
-    return mixed_x, y_a, y_b, lam
-
-def mixup_criterion(criterion, pred, y_a, y_b, lam):
-    return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
 # 데이터 증강 및 정규화
 stats = ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
@@ -159,7 +142,7 @@ class LinearWarmupScheduler:
             param_group['lr'] = lr_scale * param_group['initial_lr']
 
 # 학습 함수 정의
-def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=0.2):  # Adjusted alpha for better mixup effect
+def train_cifar(batch_size, lr, epochs, data_dir=None):
     trainset, testset = load_data(data_dir)
 
     train_size = int(len(trainset) * 0.8)
@@ -168,10 +151,10 @@ def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=0.2):  # Adjusted a
     )
 
     trainloader = torch.utils.data.DataLoader(
-        train_subset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True
+        train_subset, batch_size=batch_size, shuffle=True, num_workers=4
     )
     valloader = torch.utils.data.DataLoader(
-        val_subset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True
+        val_subset, batch_size=batch_size, shuffle=False, num_workers=4
     )
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -193,11 +176,10 @@ def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=0.2):  # Adjusted a
 
         for inputs, labels in trainloader:
             inputs, labels = inputs.to(device), labels.to(device)
-            
-            mixed_inputs, targets_a, targets_b, lam = mixup_data(inputs, labels, alpha)
+
             optimizer.zero_grad()
-            outputs = net(mixed_inputs)
-            loss = mixup_criterion(criterion, outputs, targets_a, targets_b, lam)
+            outputs = net(inputs)
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -253,12 +235,11 @@ def plot_results(epochs, train_losses, val_accuracies, filename):
 # Main 함수 실행
 def main():
     data_dir = os.path.abspath("./data")
-    batch_size = 1024
+    batch_size = 256
     lr = 0.05  # Reduced learning rate for smoother training
-    epochs = 50
-    alpha = 0.2
+    epochs = 30
 
-    train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, data_dir=data_dir, alpha=alpha)
+    train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, data_dir=data_dir)
 
 if __name__ == "__main__":
     main()
