@@ -237,7 +237,7 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
     )
 
     # DataLoader
-    trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=16)
+    trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
     valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     # ResNet6 모델 불러오기
