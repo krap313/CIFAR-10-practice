@@ -171,7 +171,7 @@ def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=0.2):  # Adjusted a
         train_subset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True
     )
     valloader = torch.utils.data.DataLoader(
-        val_subset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True
+        val_subset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True
     )
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -220,10 +220,13 @@ def train_cifar(batch_size, lr, epochs, data_dir=None, alpha=0.2):  # Adjusted a
 
         print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss / len(trainloader):.4f}, Val Accuracy: {val_accuracy:.4f}")
 
+        # 실시간 그래프 업데이트
+        plot_results(range(1, epochs + 1), train_losses, val_accuracies, "training_results.png")
+
     return train_losses, val_accuracies
 
 # 학습 결과 시각화
-def plot_results(epochs, train_losses, val_accuracies):
+def plot_results(epochs, train_losses, val_accuracies, filename):
     plt.figure(figsize=(12, 6))
 
     # 손실 그래프
@@ -243,19 +246,18 @@ def plot_results(epochs, train_losses, val_accuracies):
     plt.legend(loc="lower right")
 
     plt.tight_layout()
-    plt.savefig("training_results.png")
-    plt.show()
+    plt.savefig(filename)
+    plt.close()
 
 # Main 함수 실행
 def main():
     data_dir = os.path.abspath("./data")
     batch_size = 1024
     lr = 0.05  # Reduced learning rate for smoother training
-    epochs = 30
+    epochs = 60
     alpha = 0.2
 
     train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, data_dir=data_dir, alpha=alpha)
-    plot_results(range(1, epochs + 1), train_losses, val_accuracies)
 
 if __name__ == "__main__":
     main()
