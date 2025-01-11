@@ -239,7 +239,6 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
     )
 
     # DataLoader
-    num_workers = get_num_workers()
     trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
     valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=8)
 
