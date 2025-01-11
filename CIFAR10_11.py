@@ -319,7 +319,7 @@ def plot_results(epochs, train_losses, val_accuracies):
 
 def main():
     data_dir = os.path.abspath("./data")
-    batch_size = 256  # Increased batch size for more stable gradients
+    batch_size = 1024  # Increased batch size for more stable gradients
     lr = 0.005  # Lower learning rate for more gradual learning
     epochs = 150  # Increased number of epochs for better convergence
     alpha = 0.2  # Reduced Mixup alpha for less aggressive data mixing
