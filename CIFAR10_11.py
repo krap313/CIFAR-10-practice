@@ -251,7 +251,53 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
 
     mixup = Mixup(alpha)
 
-    # 학습
+    # 결과 실시간 업데이트를 위한 그래프 설정
+def plot_live(epochs, train_losses, val_accuracies):
+    plt.ion()  # Interactive mode on
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+
+    ax1.set_title("Loss per Epoch")
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss")
+    train_loss_line, = ax1.plot([], [], label="Train Loss", color="blue")
+    ax1.legend()
+
+    ax2.set_title("Accuracy per Epoch")
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("Accuracy")
+    val_acc_line, = ax2.plot([], [], label="Validation Accuracy", color="orange")
+    ax2.legend()
+
+    return fig, ax1, ax2, train_loss_line, val_acc_line
+
+# 학습 함수에서 실시간 업데이트
+def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
+    trainset, testset = load_data(data_dir)
+
+    # 데이터 분할
+    train_size = int(len(trainset) * 0.9)
+    train_subset, val_subset = random_split(
+        trainset, [train_size, len(trainset) - train_size]
+    )
+
+    # DataLoader
+    trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
+    valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=4)
+
+    # ResNet6 모델 불러오기
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    net = ResNet6(num_classes=10).to(device)
+
+    # Optimizer, Scheduler, Loss
+    optimizer = optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
+    scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=10, cycle_mult=2, max_lr=lr, min_lr=1e-5, warmup_steps=5, gamma=0.5)
+    criterion = LabelSmoothingLoss(classes=10, smoothing=0.1)
+
+    mixup = Mixup(alpha)
+
+    # 실시간 그래프 설정
+    fig, ax1, ax2, train_loss_line, val_acc_line = plot_live(epochs, [], [])
+
     train_losses, val_accuracies = [], []
     for epoch in range(epochs):
         net.train()
@@ -274,7 +320,7 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
                 loss.backward()
                 optimizer.step()
 
-                running_loss += loss.item()  # 각 배치 손실 합산
+                running_loss += loss.item()
                 t.set_postfix(loss=running_loss / len(t))
 
         train_losses.append(running_loss / len(trainloader))
@@ -297,7 +343,20 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
 
         print(f"Epoch {epoch+1}/{epochs}, Loss: {train_losses[-1]:.4f}, Val Accuracy: {val_accuracy:.4f}")
 
+        # 실시간 그래프 업데이트
+        train_loss_line.set_data(range(1, len(train_losses) + 1), train_losses)
+        val_acc_line.set_data(range(1, len(val_accuracies) + 1), val_accuracies)
+        ax1.relim()
+        ax1.autoscale_view()
+        ax2.relim()
+        ax2.autoscale_view()
+        plt.pause(0.1)  # 그래프 업데이트
+
+    plt.ioff()  # Interactive mode off
+    plt.show()
+
     return train_losses, val_accuracies
+
 
 # 결과 시각화
 def plot_results(epochs, train_losses, val_accuracies):
