@@ -62,7 +62,7 @@ class ResidualBlock(nn.Module):
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-        out = self.conv2(out)  # Corrected here
+        out = self.conv2(out)
         out = self.bn2(out)
         out += identity
         return self.relu(out)
@@ -72,7 +72,7 @@ stats = ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 train_tfms = transforms.Compose([
     transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
     transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(degrees=10),
+    transforms.RandomRotation(degrees=30),
     transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1),
     Cutout(size=8),  # Increased size for better effect
     AddNoise(std=0.01),  # Reduced noise for cleaner augmentation
@@ -86,12 +86,16 @@ valid_tfms = transforms.Compose([
 
 # CIFAR-10 데이터 로드
 def load_data(data_dir="./data"):
-    trainset = torchvision.datasets.CIFAR10(
-        root=data_dir, train=True, download=True, transform=train_tfms
-    )
-    testset = torchvision.datasets.CIFAR10(
-        root=data_dir, train=False, download=True, transform=valid_tfms
-    )
+    try:
+        trainset = torchvision.datasets.CIFAR10(
+            root=data_dir, train=True, download=True, transform=train_tfms
+        )
+        testset = torchvision.datasets.CIFAR10(
+            root=data_dir, train=False, download=True, transform=valid_tfms
+        )
+    except Exception as e:
+        print(f"Error loading dataset: {e}")
+        raise
     return trainset, testset
 
 # ResNet 모델 정의
@@ -129,10 +133,9 @@ class ResNet(nn.Module):
 
 # Linear Warmup Scheduler
 class LinearWarmupScheduler:
-    def __init__(self, optimizer, warmup_steps, total_steps):
+    def __init__(self, optimizer, warmup_steps):
         self.optimizer = optimizer
         self.warmup_steps = warmup_steps
-        self.total_steps = total_steps
         self.current_step = 0
 
     def step(self):
@@ -150,12 +153,16 @@ def train_cifar(batch_size, lr, epochs, data_dir=None):
         trainset, [train_size, len(trainset) - train_size]
     )
 
-    trainloader = torch.utils.data.DataLoader(
-        train_subset, batch_size=batch_size, shuffle=True, num_workers=4
-    )
-    valloader = torch.utils.data.DataLoader(
-        val_subset, batch_size=batch_size, shuffle=False, num_workers=4
-    )
+    try:
+        trainloader = torch.utils.data.DataLoader(
+            train_subset, batch_size=batch_size, shuffle=True, num_workers=4
+        )
+        valloader = torch.utils.data.DataLoader(
+            val_subset, batch_size=batch_size, shuffle=False, num_workers=4
+        )
+    except Exception as e:
+        print(f"Error initializing DataLoader: {e}")
+        raise
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     net = ResNet(num_classes=10).to(device)
@@ -163,9 +170,8 @@ def train_cifar(batch_size, lr, epochs, data_dir=None):
     for param_group in optimizer.param_groups:
         param_group['initial_lr'] = lr
 
-    warmup_steps = int(len(trainloader) * 3)  # Reduced warmup steps for faster convergence
-    total_steps = len(trainloader) * epochs
-    scheduler = LinearWarmupScheduler(optimizer, warmup_steps, total_steps)
+    warmup_scheduler = LinearWarmupScheduler(optimizer, warmup_steps=int(len(trainloader) * 5))  # Warmup for 5 epochs
+    onecycle_scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=lr, epochs=epochs, steps_per_epoch=len(trainloader))
     criterion = nn.CrossEntropyLoss()
 
     train_losses, val_accuracies = [], []
@@ -174,7 +180,7 @@ def train_cifar(batch_size, lr, epochs, data_dir=None):
         net.train()
         running_loss = 0.0
 
-        for inputs, labels in trainloader:
+        for step, (inputs, labels) in enumerate(trainloader):
             inputs, labels = inputs.to(device), labels.to(device)
 
             optimizer.zero_grad()
@@ -182,7 +188,11 @@ def train_cifar(batch_size, lr, epochs, data_dir=None):
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            scheduler.step()
+
+            if epoch < 5:  # Apply linear warmup for the first 5 epochs
+                warmup_scheduler.step()
+            else:  # Use OneCycleLR scheduler afterwards
+                onecycle_scheduler.step()
 
             running_loss += loss.item()
 
@@ -237,7 +247,7 @@ def main():
     data_dir = os.path.abspath("./data")
     batch_size = 128
     lr = 0.05  # Reduced learning rate for smoother training
-    epochs = 30
+    epochs = 50
 
     train_losses, val_accuracies = train_cifar(batch_size, lr, epochs, data_dir=data_dir)
 
