@@ -147,8 +147,14 @@ def load_data(data_dir="./data"):
     )
     return trainset, testset
 
+# Linear Warmup Scheduler 클래스
+def linear_warmup(epoch, warmup_epochs, base_lr, max_lr):
+    if epoch < warmup_epochs:
+        return base_lr + (max_lr - base_lr) * (epoch / warmup_epochs)
+    return max_lr
+
 # 학습 함수
-def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
+def train_cifar(batch_size, lr, max_lr, warmup_epochs, epochs, alpha, data_dir=None):
     trainset, testset = load_data(data_dir)
 
     # 데이터 분할
@@ -177,6 +183,12 @@ def train_cifar(batch_size, lr, epochs, alpha, data_dir=None):
     for epoch in range(epochs):
         net.train()
         running_loss = 0.0
+
+        # Linear warmup 적용
+        warmup_lr = linear_warmup(epoch, warmup_epochs, lr, max_lr)
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = warmup_lr
+
         for inputs, labels in trainloader:
             inputs, labels = inputs.to(device), labels.to(device)
 
